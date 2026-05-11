@@ -9,19 +9,48 @@ void main() {
   const MethodChannel channel = MethodChannel('ios_apn_manager');
 
   setUp(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
       channel,
       (MethodCall methodCall) async {
-        return '42';
+        switch (methodCall.method) {
+          case 'requestPermission':
+            return true;
+          case 'setBadgeCount':
+            return null;
+          case 'scheduleLocalNotification':
+            return 'test-id';
+          case 'cancelAllNotifications':
+            return null;
+          default:
+            return null;
+        }
       },
     );
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
   });
 
-  test('getPlatformVersion', () async {
-    expect(await platform.getPlatformVersion(), '42');
+  test('requestPermission', () async {
+    expect(await platform.requestPermission(), true);
+  });
+
+  test('setBadgeCount', () async {
+    await platform.setBadgeCount(3);
+  });
+
+  test('scheduleLocalNotification', () async {
+    final id = await platform.scheduleLocalNotification(
+      title: 'Test',
+      body: 'Body',
+    );
+    expect(id, 'test-id');
+  });
+
+  test('cancelAllNotifications', () async {
+    await platform.cancelAllNotifications();
   });
 }

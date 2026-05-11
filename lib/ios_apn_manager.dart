@@ -1,5 +1,3 @@
-library ios_apn_manager;
-
 export 'ios_apn_manager_platform_interface.dart' show IosApnManagerPlatform;
 
 import 'dart:async';

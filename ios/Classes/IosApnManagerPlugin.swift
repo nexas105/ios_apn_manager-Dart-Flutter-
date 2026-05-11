@@ -29,6 +29,7 @@ public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCen
     )
     let instance = IosApnManagerPlugin()
     instance.channel = channel
+    shared = instance
 
     registrar.addMethodCallDelegate(instance, channel: channel)
     registrar.addApplicationDelegate(instance)
@@ -115,13 +116,44 @@ public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCen
   }
 
   // ── APNs token callbacks ──────────────────────────────────────────────────
+  // Called via registrar.addApplicationDelegate AND via AppDelegate bridge.
+  // The static bridge is more reliable across Flutter versions.
+
+  /// Static bridge — call this from AppDelegate to guarantee token delivery.
+  ///
+  /// ```swift
+  /// // AppDelegate.swift
+  /// override func application(_ application: UIApplication,
+  ///   didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+  ///   IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+  ///   super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  /// }
+  /// ```
+  public static func didRegisterForRemoteNotifications(deviceToken: Data) {
+    let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+    NSLog("[IosApnManager] token received: %@", String(token.prefix(8)) + "…")
+    guard let ch = shared?.channel else {
+      NSLog("[IosApnManager] ⚠️ shared instance is nil — token dropped")
+      return
+    }
+    ch.invokeMethod("onToken", arguments: token)
+  }
+
+  public static func didFailToRegisterForRemoteNotifications(error: Error) {
+    NSLog("[IosApnManager] token error: %@", error.localizedDescription)
+    shared?.channel?.invokeMethod("onTokenError", arguments: error.localizedDescription)
+  }
+
+  // Strong singleton — the plugin instance must outlive the APNs token callback.
+  // addMethodCallDelegate / addApplicationDelegate hold only weak refs in Flutter iOS,
+  // so a weak var here would be deallocated before didRegisterForRemoteNotifications fires.
+  private static var shared: IosApnManagerPlugin?
 
   public func application(
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) -> Bool {
-    let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-    channel?.invokeMethod("onToken", arguments: token)
+    IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
     return true
   }
 
@@ -129,7 +161,7 @@ public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCen
     _ application: UIApplication,
     didFailToRegisterForRemoteNotificationsWithError error: Error
   ) -> Bool {
-    channel?.invokeMethod("onTokenError", arguments: error.localizedDescription)
+    IosApnManagerPlugin.didFailToRegisterForRemoteNotifications(error: error)
     return true
   }
 
