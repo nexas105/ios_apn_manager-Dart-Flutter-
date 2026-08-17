@@ -1,0 +1,163 @@
+import Flutter
+import UIKit
+import UserNotifications
+
+/// Flutter plugin for full-cycle APNs push notification management on iOS.
+/// No Firebase, no third-party SDK.
+///
+/// Flutter → Native:
+///   requestPermission                   → Bool (granted)
+///   setBadgeCount(count: Int)           → void
+///   cancelAllNotifications              → void
+///
+/// Native → Flutter:
+///   onToken(String)                     — hex APNs device token
+///   onTokenError(String)                — registration failure message
+///   onMessage(Map)                      — notification received in foreground
+///   onNotificationTap(Map)              — user tapped a notification
+public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate {
+
+  private var channel: FlutterMethodChannel?
+
+  // ── Registration ──────────────────────────────────────────────────────────
+
+  public static func register(with registrar: FlutterPluginRegistrar) {
+    let channel = FlutterMethodChannel(
+      name: "ios_apn_manager",
+      binaryMessenger: registrar.messenger()
+    )
+    let instance = IosApnManagerPlugin()
+    instance.channel = channel
+    shared = instance
+
+    registrar.addMethodCallDelegate(instance, channel: channel)
+    registrar.addApplicationDelegate(instance)
+    UNUserNotificationCenter.current().delegate = instance
+  }
+
+  // ── Flutter → Native ─────────────────────────────────────────────────────
+
+  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "requestPermission":
+      requestPermission(result: result)
+    case "setBadgeCount":
+      let count = (call.arguments as? [String: Any])?["count"] as? Int ?? 0
+      setBadgeCount(count, result: result)
+    case "cancelAllNotifications":
+      UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+      UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  // ── Permission + APNs registration ───────────────────────────────────────
+
+  private func requestPermission(result: @escaping FlutterResult) {
+    UNUserNotificationCenter.current().requestAuthorization(
+      options: [.alert, .badge, .sound]
+    ) { granted, _ in
+      DispatchQueue.main.async {
+        if granted { UIApplication.shared.registerForRemoteNotifications() }
+        result(granted)
+      }
+    }
+  }
+
+  // ── Badge ─────────────────────────────────────────────────────────────────
+
+  private func setBadgeCount(_ count: Int, result: @escaping FlutterResult) {
+    DispatchQueue.main.async {
+      if #available(iOS 16.0, *) {
+        UNUserNotificationCenter.current().setBadgeCount(count) { _ in result(nil) }
+      } else {
+        UIApplication.shared.applicationIconBadgeNumber = count
+        result(nil)
+      }
+    }
+  }
+
+  // ── APNs token callbacks ──────────────────────────────────────────────────
+  // Called via registrar.addApplicationDelegate AND via AppDelegate bridge.
+  // The static bridge is more reliable across Flutter versions.
+
+  /// Static bridge — call this from AppDelegate to guarantee token delivery.
+  ///
+  /// ```swift
+  /// // AppDelegate.swift
+  /// override func application(_ application: UIApplication,
+  ///   didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+  ///   IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+  ///   super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  /// }
+  /// ```
+  public static func didRegisterForRemoteNotifications(deviceToken: Data) {
+    let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+    NSLog("[IosApnManager] token received: %@", String(token.prefix(8)) + "…")
+    guard let ch = shared?.channel else {
+      NSLog("[IosApnManager] ⚠️ shared instance is nil — token dropped")
+      return
+    }
+    ch.invokeMethod("onToken", arguments: token)
+  }
+
+  public static func didFailToRegisterForRemoteNotifications(error: Error) {
+    NSLog("[IosApnManager] token error: %@", error.localizedDescription)
+    shared?.channel?.invokeMethod("onTokenError", arguments: error.localizedDescription)
+  }
+
+  // Strong singleton — the plugin instance must outlive the APNs token callback.
+  // addMethodCallDelegate / addApplicationDelegate hold only weak refs in Flutter iOS,
+  // so a weak var here would be deallocated before didRegisterForRemoteNotifications fires.
+  private static var shared: IosApnManagerPlugin?
+
+  public func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) -> Bool {
+    IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+    return true
+  }
+
+  public func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) -> Bool {
+    IosApnManagerPlugin.didFailToRegisterForRemoteNotifications(error: error)
+    return true
+  }
+
+  // ── UNUserNotificationCenterDelegate ─────────────────────────────────────
+
+  public func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    channel?.invokeMethod("onMessage", arguments: toStringMap(notification.request.content.userInfo))
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
+  }
+
+  public func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    channel?.invokeMethod("onNotificationTap", arguments: toStringMap(response.notification.request.content.userInfo))
+    completionHandler()
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  private func toStringMap(_ dict: [AnyHashable: Any]) -> [String: Any] {
+    var out: [String: Any] = [:]
+    for (k, v) in dict { if let s = k as? String { out[s] = v } }
+    return out
+  }
+}
