@@ -1,3 +1,13 @@
+## 1.3.1
+
+* Android: `onNotificationTap` no longer fires on app launches that were not
+  caused by a notification (deep links, app shortcuts, `flutter run` debug
+  extras). A launch intent only counts as a tap if it carries FCM's keys.
+* Android: `onToken` delivers the same token only once per engine instead of
+  up to three times per launch.
+* Server: keep the APNs HTTP/2 session referenced while requests are in flight;
+  log a concrete hint for errors caused by server configuration.
+
 ## 1.3.0
 
 * Add `PushServerClient` and `HttpSendHandler` to register device tokens and send

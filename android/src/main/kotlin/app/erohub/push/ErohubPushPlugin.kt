@@ -167,6 +167,10 @@ class ErohubPushPlugin :
         val extras = intent.extras ?: return
         if (extras.isEmpty) return
 
+        // Only a notification tap carries FCM's own keys. Other launch extras
+        // (deep links, app shortcuts, `flutter run` debug flags) are not taps.
+        if (!extras.containsKey("google.message_id") && !extras.containsKey("google.sent_time")) return
+
         // FCM data-only messages put their payload directly in the intent extras
         // when the user taps a notification (notification + data hybrid messages
         // also include data). We mark consumed via a sentinel so the same intent
