@@ -1,0 +1,25 @@
+{
+  "name": "push-manager-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted push server for the push_manager Flutter plugin (APNs + FCM HTTP v1).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/main.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "gen-key": "node -e \"console.log(require('node:crypto').randomBytes(32).toString('base64url'))\""
+  },
+  "dependencies": {
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

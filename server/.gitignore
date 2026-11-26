@@ -1,0 +1,6 @@
+node_modules/
+data/
+.env
+# Keys never go into git. Put AuthKey_XXXX.p8 / service-account.json here.
+secrets/*
+!secrets/.gitkeep

@@ -1,0 +1,9 @@
+node_modules
+data
+secrets
+test
+.env
+.env.*
+*.md
+Caddyfile
+docker-compose*.yml
