@@ -1,4 +1,4 @@
-## Unreleased
+## 1.3.0
 
 * Add `PushServerClient` and `HttpSendHandler` to register device tokens and send
   pushes through the self-hosted push server. `setSendHandler` keeps working for
