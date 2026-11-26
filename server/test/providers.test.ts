@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createServer } from "node:http";
+import { promisify } from "node:util";
 import http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 import { after, describe, it } from "node:test";
@@ -7,6 +9,8 @@ import { decodeJwt, decodeProtectedHeader } from "jose";
 import { ApnsClient, apnsErrorCode, buildApnsPayload } from "../src/apns.ts";
 import { FcmClient, buildFcmMessage, fcmErrorCode, fcmInvalidToken } from "../src/fcm.ts";
 import { ecKeyPem, IOS_TOKEN, rsaKeyPem } from "./helpers.ts";
+
+const execFileAsync = promisify(execFile);
 
 describe("APNs payload", () => {
   it("puts custom data next to aps", () => {
@@ -88,6 +92,21 @@ describe("ApnsClient over HTTP/2", () => {
     const dead = await client.send("dead", "sandbox", { title: "T", body: "B" });
     assert.deepEqual(dead, { ok: false, status: 410, error: "Unregistered", invalidToken: true });
     client.close();
+
+    // Regression: a process whose only handle is the APNs request must not exit mid-request
+    // (the session used to be unref()'d).
+    const apnsModule = new URL("../src/apns.ts", import.meta.url).href;
+    const script = `
+      import { ApnsClient } from ${JSON.stringify(apnsModule)};
+      const c = new ApnsClient(${JSON.stringify({ key: ecKeyPem(), keyId: "K", teamId: "T", bundleId: "b", defaultEnvironment: "sandbox" })},
+        { sandbox: ${JSON.stringify(base)}, production: ${JSON.stringify(base)} });
+      const r = await c.send(${JSON.stringify(IOS_TOKEN)}, "sandbox", { title: "t", body: "b" });
+      console.log(JSON.stringify(r));
+      c.close();`;
+    const { stdout } = await execFileAsync(process.execPath, [
+      "--disable-warning=ExperimentalWarning", "--input-type=module", "-e", script,
+    ]);
+    assert.equal(JSON.parse(stdout.trim()).ok, true);
   });
 });
 
