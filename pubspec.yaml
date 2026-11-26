@@ -1,6 +1,6 @@
 name: push_manager
 description: "Minimal push manager — APNs on iOS, FCM on Android. Native code only, no Flutter Firebase plugins (keeps iOS Firebase-free)."
-version: 1.3.0
+version: 1.3.1
 
 homepage: https://github.com/nexas105/ios_apn_manager-Dart-Flutter-
 repository: https://github.com/nexas105/ios_apn_manager-Dart-Flutter-

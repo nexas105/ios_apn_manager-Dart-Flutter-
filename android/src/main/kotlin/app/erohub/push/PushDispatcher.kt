@@ -14,16 +14,26 @@ object PushDispatcher {
     private var channel: MethodChannel? = null
     private val main = Handler(Looper.getMainLooper())
 
+    /// Last token delivered to the current engine. The token is requested from
+    /// several places (engine attach, requestPermission, onNewToken), so the
+    /// same value would otherwise reach Dart up to three times per launch.
+    private var lastEmittedToken: String? = null
+
     fun bind(channel: MethodChannel) {
         this.channel = channel
+        main.post { lastEmittedToken = null }
     }
 
     fun unbind() {
         channel = null
+        main.post { lastEmittedToken = null }
     }
 
     fun emitToken(token: String) = main.post {
-        channel?.invokeMethod("onToken", token)
+        val ch = channel ?: return@post
+        if (token == lastEmittedToken) return@post
+        lastEmittedToken = token
+        ch.invokeMethod("onToken", token)
     }
 
     fun emitTokenError(error: String) = main.post {

@@ -36,7 +36,7 @@ ready-made `HttpSendHandler`, or plug in any backend you like via `setSendHandle
 
 ```yaml
 dependencies:
-  push_manager: ^1.3.0
+  push_manager: ^1.3.1
 ```
 
 **iOS (Xcode):** `Signing & Capabilities` → `+ Capability` → **Push Notifications**.
