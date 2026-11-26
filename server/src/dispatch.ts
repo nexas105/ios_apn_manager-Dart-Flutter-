@@ -31,6 +31,18 @@ export interface DispatchResult {
 
 const CONCURRENCY = 10;
 
+/** Errors that point at the server configuration rather than the token. */
+const CONFIG_HINTS: Record<string, string> = {
+  DeviceTokenNotForTopic: "APNS_BUNDLE_ID does not match the app that created this token",
+  InvalidProviderToken:
+    "Apple rejected the .p8 key: check APNS_KEY_ID and APNS_TEAM_ID, and that the key has APNs enabled " +
+    "(App Store Connect API keys are also named AuthKey_<id>.p8 but cannot send pushes)",
+  ExpiredProviderToken: "the server clock is probably wrong",
+  SENDER_ID_MISMATCH: "the FCM service account belongs to a different Firebase project than the app",
+  THIRD_PARTY_AUTH_ERROR: "APNs credentials uploaded to Firebase are invalid or missing",
+  fcm_auth_error: "the FCM service account could not get an OAuth token (wrong or revoked key?)",
+};
+
 async function sendApns(
   apns: ApnsSender,
   t: Target,
@@ -72,19 +84,14 @@ async function sendOne(t: Target, msg: PushMessage, deps: DispatchDeps): Promise
     }
   }
   if (!r.ok) {
-    const level = r.error === "DeviceTokenNotForTopic" || r.error === "SENDER_ID_MISMATCH" ? "warn" : "info";
+    const level = r.error && r.error in CONFIG_HINTS ? "warn" : "info";
     log[level]("delivery failed", {
       platform: t.platform,
       token: maskToken(t.token),
       status: r.status,
       error: r.error,
       invalidToken: r.invalidToken,
-      hint:
-        r.error === "DeviceTokenNotForTopic"
-          ? "APNS_BUNDLE_ID does not match the app that created this token"
-          : r.error === "SENDER_ID_MISMATCH"
-            ? "the FCM service account belongs to a different Firebase project than the app"
-            : undefined,
+      hint: r.error ? CONFIG_HINTS[r.error] : undefined,
     });
   }
   return {

@@ -100,8 +100,6 @@ export class ApnsClient implements ApnsSender {
     s.on("error", drop);
     s.on("goaway", drop);
     s.on("close", drop);
-    // Do not keep the process alive just for an idle connection.
-    s.unref();
     this.sessions.set(env, s);
     return s;
   }
