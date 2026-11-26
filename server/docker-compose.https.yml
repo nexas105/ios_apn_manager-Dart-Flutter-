@@ -1,0 +1,34 @@
+# Optional override: Caddy in front of the server with automatic HTTPS (Let's Encrypt).
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+# Requires DOMAIN and ACME_EMAIL in .env, a DNS A/AAAA record pointing to this host,
+# and ports 80 + 443 reachable from the internet.
+services:
+  push-server:
+    # Only reachable through Caddy, not directly from outside.
+    ports: !reset []
+    expose:
+      - "${PORT:-8080}"
+    environment:
+      TRUST_PROXY: "true"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - push-server
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env (e.g. push.example.com)}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (for Let's Encrypt notices)}
+      UPSTREAM: push-server:${PORT:-8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

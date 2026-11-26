@@ -1,4 +1,5 @@
 export 'push_manager_platform_interface.dart' show PushManagerPlatform;
+export 'push_server_client.dart';
 
 import 'dart:async';
 
@@ -10,11 +11,13 @@ import 'push_manager_platform_interface.dart';
 /// ## Quick start
 /// ```dart
 /// // 1. Wire up callbacks
-/// PushManager.onToken        = (token) => repo.upsertToken(token);
-/// PushManager.onNotificationTap = (p)  => router.handle(p['screen']);
-/// PushManager.setSendHandler((profileId, title, body, data) async {
-///   await repo.enqueue(profileId: profileId, title: title, body: body, data: data);
-/// });
+/// final push = PushServerClient(
+///   baseUrl: Uri.parse('https://push.example.com'),
+///   apiKey: const String.fromEnvironment('PUSH_CLIENT_KEY'),
+/// );
+/// PushManager.onToken           = (token) => push.registerToken(userId: me.id, token: token);
+/// PushManager.onNotificationTap = (p)     => router.handle(p['screen']);
+/// PushManager.setSendHandler(HttpSendHandler.fromClient(push).call);
 ///
 /// // 2. Request permission (triggers APNs / FCM registration)
 /// await PushManager.requestPermission();
@@ -32,9 +35,9 @@ import 'push_manager_platform_interface.dart';
 /// await PushManager.cancelAllNotifications();
 /// ```
 ///
-/// Note: on-device *scheduled* local notifications are handled by
-/// `flutter_local_notifications` (see `SyncSessionReminderService`), not by
-/// this plugin — it only owns remote push + badge + cancel.
+/// Note: on-device *scheduled* local notifications are not part of this
+/// plugin (use e.g. `flutter_local_notifications`). It only owns remote push,
+/// badge and cancel.
 abstract final class PushManager {
   static PushManagerPlatform get _p => PushManagerPlatform.instance;
 
@@ -42,13 +45,21 @@ abstract final class PushManager {
   // Configuration
   // ---------------------------------------------------------------------------
 
-  /// Provides the custom send implementation.
-  /// Called by [sendPush] — the plugin does not know about Supabase / HTTP.
+  /// Provides the send implementation called by [sendPush].
   ///
-  /// Example (erohub):
+  /// With the self-hosted push server (`server/` in this repository), use the
+  /// ready-made [HttpSendHandler]:
+  /// ```dart
+  /// PushManager.setSendHandler(HttpSendHandler(
+  ///   url: Uri.parse('https://push.example.com'),
+  ///   apiKey: const String.fromEnvironment('PUSH_CLIENT_KEY'),
+  /// ).call);
+  /// ```
+  ///
+  /// Or plug in your own backend:
   /// ```dart
   /// PushManager.setSendHandler((profileId, title, body, data) async {
-  ///   await const PushRepo().enqueue(
+  ///   await myBackend.enqueuePush(
   ///     profileId: profileId, title: title, body: body, data: data);
   /// });
   /// ```
@@ -58,7 +69,8 @@ abstract final class PushManager {
       String title,
       String body,
       Map<String, dynamic>? data,
-    ) handler,
+    )
+    handler,
   ) => _sendHandler = handler;
 
   static Future<void> Function(
@@ -66,7 +78,8 @@ abstract final class PushManager {
     String title,
     String body,
     Map<String, dynamic>? data,
-  )? _sendHandler;
+  )?
+  _sendHandler;
 
   // ---------------------------------------------------------------------------
   // Callbacks (native → Dart)

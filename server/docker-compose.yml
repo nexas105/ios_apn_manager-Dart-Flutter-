@@ -1,0 +1,20 @@
+# Plain HTTP on ${PORT}. Locally that's all you need; online, put it behind your
+# own reverse proxy (nginx, Traefik, Caddy …) or add the bundled Caddy with:
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+services:
+  push-server:
+    build: .
+    image: push-manager-server:local
+    env_file: .env
+    environment:
+      # Fixed inside the container; mount your keys into ./secrets.
+      DATABASE_PATH: /data/push.db
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-8080}:${PORT:-8080}"
+    volumes:
+      - push-data:/data
+      - ./secrets:/secrets:ro
+    restart: unless-stopped
+
+volumes:
+  push-data:
