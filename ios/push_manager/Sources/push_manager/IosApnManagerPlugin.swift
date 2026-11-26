@@ -80,19 +80,10 @@ public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCen
   }
 
   // ── APNs token callbacks ──────────────────────────────────────────────────
-  // Called via registrar.addApplicationDelegate AND via AppDelegate bridge.
-  // The static bridge is more reliable across Flutter versions.
+  // Flutter forwards these via registrar.addApplicationDelegate — no
+  // AppDelegate code needed. Signatures must return Void to match
+  // FlutterApplicationLifeCycleDelegate, otherwise they are never called.
 
-  /// Static bridge — call this from AppDelegate to guarantee token delivery.
-  ///
-  /// ```swift
-  /// // AppDelegate.swift
-  /// override func application(_ application: UIApplication,
-  ///   didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-  ///   IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
-  ///   super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
-  /// }
-  /// ```
   public static func didRegisterForRemoteNotifications(deviceToken: Data) {
     let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
     NSLog("[IosApnManager] token received: %@", String(token.prefix(8)) + "…")
@@ -116,17 +107,15 @@ public class IosApnManagerPlugin: NSObject, FlutterPlugin, UNUserNotificationCen
   public func application(
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-  ) -> Bool {
+  ) {
     IosApnManagerPlugin.didRegisterForRemoteNotifications(deviceToken: deviceToken)
-    return true
   }
 
   public func application(
     _ application: UIApplication,
     didFailToRegisterForRemoteNotificationsWithError error: Error
-  ) -> Bool {
+  ) {
     IosApnManagerPlugin.didFailToRegisterForRemoteNotifications(error: error)
-    return true
   }
 
   // ── UNUserNotificationCenterDelegate ─────────────────────────────────────

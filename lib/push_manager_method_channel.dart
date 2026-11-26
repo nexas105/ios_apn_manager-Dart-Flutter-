@@ -61,7 +61,12 @@ class MethodChannelPushManager extends PushManagerPlatform {
       _channel.invokeMethod('cancelAllNotifications');
 
   @override
-  void simulateTap(Map<String, dynamic> payload) => _tapController.add(payload);
+  void simulateTap(Map<String, dynamic> payload) {
+    // Same two-track delivery as a real tap from native — the callback is the
+    // track PushService actually listens on.
+    _onNotificationTap?.call(payload);
+    _tapController.add(payload);
+  }
 
   // ── Native → Dart dispatch ────────────────────────────────────────────────
 

@@ -36,7 +36,8 @@ class ErohubPushPlugin :
     FlutterPlugin,
     ActivityAware,
     MethodChannel.MethodCallHandler,
-    PluginRegistry.RequestPermissionsResultListener {
+    PluginRegistry.RequestPermissionsResultListener,
+    PluginRegistry.NewIntentListener {
 
     private lateinit var channel: MethodChannel
     private lateinit var appContext: Context
@@ -52,11 +53,6 @@ class ErohubPushPlugin :
 
         // Register a single static dispatcher so FcmService can forward events.
         PushDispatcher.bind(channel)
-
-        // Cold-start tap: if MainActivity was launched from a notification tap,
-        // the intent extras carry the data payload. Surface it once so PushService
-        // can route navigation.
-        flushColdStartTapIfAny()
 
         // If a permission was granted previously and the OS has a token cached,
         // re-emit it so PushRepo upserts on app launch.
@@ -77,14 +73,28 @@ class ErohubPushPlugin :
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
         binding.addRequestPermissionsResultListener(this)
+        binding.addOnNewIntentListener(this)
+        // Cold-start tap: MainActivity was launched from a notification tap, so
+        // the intent extras carry the data payload. Only reachable here — in
+        // onAttachedToEngine the activity is still null.
+        emitTapFrom(binding.activity.intent)
     }
 
     override fun onDetachedFromActivityForConfigChanges() { activity = null }
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
         binding.addRequestPermissionsResultListener(this)
+        binding.addOnNewIntentListener(this)
     }
     override fun onDetachedFromActivity() { activity = null }
+
+    /// Warm tap: the activity is singleTop, so a notification tap on a running
+    /// app arrives here instead of through a fresh launch intent.
+    override fun onNewIntent(intent: Intent): Boolean {
+        activity?.intent = intent
+        emitTapFrom(intent)
+        return false
+    }
 
     // ── Method dispatch ───────────────────────────────────────────────────────
 
@@ -152,8 +162,8 @@ class ErohubPushPlugin :
         }
     }
 
-    private fun flushColdStartTapIfAny() {
-        val intent = activity?.intent ?: return
+    private fun emitTapFrom(intent: Intent?) {
+        if (intent == null) return
         val extras = intent.extras ?: return
         if (extras.isEmpty) return
 
@@ -171,7 +181,9 @@ class ErohubPushPlugin :
             payload[key] = extras.get(key)
         }
         if (payload.isNotEmpty()) {
-            extras.putBoolean("erohub_tap_consumed", true)
+            // getExtras() hands out a COPY — the sentinel has to go on the
+            // intent itself, else the same tap fires again on every re-attach.
+            intent.putExtra("erohub_tap_consumed", true)
             PushDispatcher.emitTap(payload)
         }
     }
